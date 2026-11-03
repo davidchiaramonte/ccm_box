@@ -61,7 +61,7 @@ These instructions assume your organization is already [exporting its billing da
 
 [Optional] If your organization has also enabled the [Recommendations Export](https://docs.cloud.google.com/recommender/docs/bq-export/export-recommendations-to-bq), then complete these additional steps.
 
-1. In the workflow settings, uncomment and configure recommendations_table with name of your Recommendations export table setup via https://cloud.google.com/recommender/docs/bq-export/export-recommendations-to-bq
+1. In the workflow settings (or Terraform variables), set `recommendations_table_name` to the name of your Recommendations export table (set up via https://cloud.google.com/recommender/docs/bq-export/export-recommendations-to-bq) and set `enable_recommendations` to `"true"`. The export table is read from `raw_billing_project`.`raw_billing_dataset`, so create the export in that dataset (or update those variables).
 
 
 ## Implementation (with Terraform)

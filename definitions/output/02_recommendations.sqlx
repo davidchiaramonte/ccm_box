@@ -24,8 +24,8 @@ config {
 }
 
 WITH
-  RecommendationsData AS ( 
--- Filtered BY its OWN latest PARTITION time
+  -- Latest daily snapshot of the Recommender export (filtered by its own latest partition time)
+  RecommendationsData AS (
   SELECT
     t1.*,
     (
@@ -43,47 +43,22 @@ WITH
       MAX(_PARTITIONTIME)
     FROM
       ${ref(dataform.projectConfig.vars.recommendations_table_name)}
-      ) 
-  -- UNION ALL
-  --   -- Query 2: Filtered BY its OWN latest PARTITION time
-  -- SELECT
-  --   t1.*,
-  --   (
-  --   SELECT
-  --     ARRAY_TO_STRING(ARRAY_AGG(REGEXP_EXTRACT(tr, r'.*googleapis.com/projects/([^/]+)/.*')), ", ")
-  --   FROM
-  --     UNNEST(t1.target_resources) AS tr ) AS project,
-  --   ancestors.organization_id AS organization_id,
-  --   _PARTITIONTIME AS PARTITIONTIME
-  -- FROM
-  --   `projid.data_staging.recommendations_export` AS t1
-  -- WHERE
-  --   t1._PARTITIONTIME = (
-  --   SELECT
-  --     MAX(_PARTITIONTIME)
-  --   FROM
-  --     `projid.data_staging.recommendations_export`)
-  -- UNION ALL
-    
-  --   -- Query 3: Filtered BY its OWN latest PARTITION time
-  -- SELECT
-  --   t1.*,
-  --   (
-  --   SELECT
-  --     ARRAY_TO_STRING(ARRAY_AGG(REGEXP_EXTRACT(tr, r'.*googleapis.com/projects/([^/]+)/.*')), ", ")
-  --   FROM
-  --     UNNEST(t1.target_resources) AS tr ) AS project,
-  --   ancestors.organization_id AS organization_id,
-  --   _PARTITIONTIME AS PARTITIONTIME
-  -- FROM
-  --   `projid.data_staging.recommendations_export` AS t1
-  -- WHERE
-  --   t1._PARTITIONTIME = (
-  --   SELECT
-  --     MAX(_PARTITIONTIME)
-  --   FROM
-  --     `projid.data_staging.recommendations_export`)
-   )
+      )
+  -- To combine exports from multiple organizations, UNION ALL additional
+  -- export tables here using the same SELECT and latest-partition filter.
+   ),
+  -- Keep the most recently refreshed recommendation per target resource set + subtype.
+  -- (Arrays cannot be used in GROUP BY / PARTITION BY, so the key is built from a string.)
+  LatestRecommendations AS (
+  SELECT
+    *
+  FROM
+    RecommendationsData
+  QUALIFY
+    ROW_NUMBER() OVER (
+      PARTITION BY ARRAY_TO_STRING(target_resources, ','), recommender_subtype
+      ORDER BY last_refresh_time DESC) = 1
+  )
 SELECT
   cloud_entity_type,
   cloud_entity_id,
@@ -98,6 +73,9 @@ SELECT
     (0)]) AS action,
   REGEXP_EXTRACT(recommendation_details, r'"link": "([^"]*)"') AS link,
   PROJECT,
+  -- Project number of the recommendation's parent entity (stable join key, unlike the
+  -- project segment of target_resources, which may be a project ID or a project number).
+  IF(cloud_entity_type = 'PROJECT_NUMBER', cloud_entity_id, NULL) AS project_number,
   t1.organization_id,
   priority,
   state,
@@ -150,7 +128,6 @@ END
     WHEN recommender = 'google.cloudfunctions.PerformanceRecommender' THEN 'Cloud Functions Instances'
     WHEN recommender = 'google.cloudsql.instance.PerformanceRecommender' THEN 'CloudSQL Instance Performance'
     WHEN recommender = 'google.cloudsql.instance.UnderprovisionedRecommender' THEN 'CloudSQL Instance Underprovision'
-    WHEN recommender = 'google.container.DiagnosisRecommender' THEN 'GKE Diagnosis'
     WHEN recommender = 'google.resourcemanager.serviceLimit.Recommender' THEN 'Service Quota Limits'
     WHEN recommender = 'google.cloudsql.instance.ReliabilityRecommender' THEN 'CloudSQL Instance Reliability'
     WHEN recommender = 'google.cloudsql.instance.OutOfDiskRecommender' THEN 'CloudSQL Instance Disk'
@@ -161,28 +138,26 @@ END
   AS recommendation_type,
   primary_impact.category AS impact_category,
   primary_impact.cost_projection.cost.currency_code AS impact_currency_code,
+  -- Cost projections are negative for savings. units and nanos share the same sign, so both
+  -- are converted to absolute values to keep them consistent with each other.
   ABS(primary_impact.cost_projection.cost.units) AS impact_cost_unit,
-  primary_impact.cost_projection.cost.nanos AS impact_cost_nanos,
+  ABS(primary_impact.cost_projection.cost.nanos) AS impact_cost_nanos,
   primary_impact.cost_projection.cost_in_local_currency.units AS impact_cost_local_currency_units,
   primary_impact.cost_projection.cost_in_local_currency.nanos AS impact_cost_local_currency_nanos,
-  primary_impact.cost_projection.duration.seconds AS impact_duraction_seconds,
+  primary_impact.cost_projection.duration.seconds AS impact_duration_seconds,
   primary_impact.cost_projection.duration.nanos AS impact_duration_nanos,
   primary_impact.cost_projection.pricing_type_name AS pricing_type_name,
+  -- Full projected cost impact over the projection duration (negative = savings).
+  primary_impact.cost_projection.cost.units
+    + primary_impact.cost_projection.cost.nanos / 1e9 AS impact_cost_amount,
+  -- Projected savings normalized to a 30-day month (positive = savings). NULL when not a cost impact.
+  IF(
+    primary_impact.category = 'COST',
+    SAFE_DIVIDE(
+      -1 * (primary_impact.cost_projection.cost.units + primary_impact.cost_projection.cost.nanos / 1e9) * 2592000,
+      primary_impact.cost_projection.duration.seconds),
+    NULL) AS estimated_monthly_savings,
   primary_impact.reliability_projection.risk_types AS risk_types,
   primary_impact.reliability_projection.details_json AS reliability_details_json,
-FROM (
-  SELECT
-    agg.t.*,
-  FROM (
-    SELECT
-      ARRAY_AGG(STRUCT(t)
-      ORDER BY
-        last_refresh_time DESC)[SAFE_OFFSET(0)].*
-    FROM
-      RecommendationsData AS t
-    CROSS JOIN
-      UNNEST(t.target_resources) AS target_resourc
-      WHERE PARTITIONTIME = (SELECT MAX(PARTITIONTIME) from RecommendationsData)
-    GROUP BY
-      target_resources,
-      recommender_subtype ) AS agg ) AS t1
+FROM
+  LatestRecommendations AS t1
