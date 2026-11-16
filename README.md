@@ -76,6 +76,9 @@ When enabled, the pipeline builds:
 ### Scheduling
 The Terraform deployment schedules a daily Git compile (`dataform_release_cron_schedule`) and a daily pipeline run (`dataform_workflow_cron_schedule`), both interpreted in `time_zone`. Without these the pipeline only runs when invoked manually. If you also deploy the anomaly alerting toolkit, keep the pipeline run ahead of its daily alert trigger (04:00 UTC by default).
 
+### Examples
+[SQL Queries/Example - Metadata Enrichment](SQL%20Queries/Example%20-%20Metadata%20Enrichment/README.md) is a plain BigQuery SQL example for enriching CCM data with FinOps planning metadata: ownership hierarchy, unit normalization, unit prices, and versioned forecasts. Read the caveats in its README before relying on results.
+
 
 ## Implementation (with Terraform)
 
