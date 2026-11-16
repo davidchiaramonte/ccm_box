@@ -89,7 +89,11 @@ SELECT
 FROM
   ${ref("vw_gcp_billing_export_daily_summary")}
 WHERE
-  ${when(incremental(),`usage_start_date IN UNNEST(v_usage_dates_processed)`,
+  -- The constant lower bound guarantees a partition-eliminating filter on the source table even when
+  -- no new dates were processed (empty array, e.g. a same-day re-run), which otherwise fails with
+  -- "Cannot query over table ... without a filter over column(s) 'usage_start_date'".
+  ${when(incremental(),`usage_start_date IN UNNEST(v_usage_dates_processed)
+  AND usage_start_date >= '${dataform.projectConfig.vars.default_start_date}'`,
   `usage_start_date >= '${dataform.projectConfig.vars.default_start_date}'`)}
   AND project_id is not NULL
   AND project_id != ''
