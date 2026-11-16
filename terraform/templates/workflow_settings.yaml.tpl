@@ -34,6 +34,10 @@ vars:
   raw_billing_dataset: "${raw_billing_dataset}"
   raw_billing_project: "${raw_billing_project}"
   recommendations_table_name: "${recommendations_table_name}"
+  recommendations_project: "${recommendations_project}"
+  recommendations_dataset: "${recommendations_dataset}"
+  # Optional project.dataset.table with project_id, owner_email, department_name (blank = no owner enrichment)
+  recommendations_owner_mapping_table: "${recommendations_owner_mapping_table}"
   
   # --- if Azure exports are available, enable these tasks
   raw_azure_table_name: "${raw_azure_table_name}"

@@ -61,7 +61,20 @@ These instructions assume your organization is already [exporting its billing da
 
 [Optional] If your organization has also enabled the [Recommendations Export](https://docs.cloud.google.com/recommender/docs/bq-export/export-recommendations-to-bq), then complete these additional steps.
 
-1. In the workflow settings (or Terraform variables), set `recommendations_table_name` to the name of your Recommendations export table (set up via https://cloud.google.com/recommender/docs/bq-export/export-recommendations-to-bq) and set `enable_recommendations` to `"true"`. The export table is read from `raw_billing_project`.`raw_billing_dataset`, so create the export in that dataset (or update those variables).
+1. In the workflow settings (or Terraform variables), set `recommendations_table_name` to the name of your Recommendations export table (set up via https://cloud.google.com/recommender/docs/bq-export/export-recommendations-to-bq) and set `enable_recommendations` to `"true"`.
+1. If the export lives somewhere other than the billing export's project/dataset, set `recommendations_project` / `recommendations_dataset` (Terraform: `recommendations_project_id` / `recommendations_dataset_name`). Blank values fall back to `raw_billing_project` / `raw_billing_dataset`. The Dataform service account needs BigQuery Data Viewer on that dataset.
+1. Optionally set `recommendations_owner_mapping_table` (Terraform: same name) to a fully-qualified table with `project_id`, `owner_email`, `department_name` columns (for example, the anomaly alerting toolkit's `project_owner_mapping`) to attribute recommendations to owners.
+
+When enabled, the pipeline builds:
+
+| Object | Purpose |
+| :--- | :--- |
+| `gcp_billing_recommendations` | Latest export snapshot, de-duplicated and flattened: parsed project/resource, friendly `service` and `recommendation_type`, action text and link, and `estimated_monthly_savings` (Google's projected savings normalized to a 30-day month). Includes all states. |
+| `vw_active_recommendations` | `ACTIVE` recommendations only, with `project_id` resolved from billing data and optional owner/department. Shared foundation for reporting, digests, and alert enrichment. |
+| `vw_recommendation_savings_vs_spend` | Per project/owner: active recommendation count, estimated monthly savings, trailing 30-day net spend, % of spend addressable, savings rank, and the top 5 recommendations. |
+
+### Scheduling
+The Terraform deployment schedules a daily Git compile (`dataform_release_cron_schedule`) and a daily pipeline run (`dataform_workflow_cron_schedule`), both interpreted in `time_zone`. Without these the pipeline only runs when invoked manually. If you also deploy the anomaly alerting toolkit, keep the pipeline run ahead of its daily alert trigger (04:00 UTC by default).
 
 
 ## Implementation (with Terraform)

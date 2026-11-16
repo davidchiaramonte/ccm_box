@@ -58,6 +58,9 @@ resource "null_resource" "workflow_settings" {
       raw_billing_dataset        = var.raw_billing_dataset_name
       raw_billing_table_name     = var.raw_billing_table_name
       recommendations_table_name = var.recommendations_table_name
+      recommendations_project    = var.recommendations_project_id == "" ? var.raw_billing_project_id : var.recommendations_project_id
+      recommendations_dataset    = var.recommendations_dataset_name == "" ? var.raw_billing_dataset_name : var.recommendations_dataset_name
+      recommendations_owner_mapping_table = var.recommendations_owner_mapping_table
       raw_azure_table_name       = var.raw_azure_table_name
       raw_azure_dataset          = var.raw_azure_dataset
       azure_advisor_table_name   = var.azure_advisor_table_name
@@ -207,7 +210,7 @@ locals {
         raw_billing_dataset    = var.raw_billing_dataset_name
         raw_billing_table_name = var.raw_billing_table_name
       }            
-      cron_schedule = null 
+      cron_schedule = var.dataform_release_cron_schedule
     }
   }
 
@@ -217,7 +220,7 @@ locals {
       release_key     = "core_release" 
       time_zone       = var.time_zone
       service_account = local.dataform_sa_email 
-      cron_schedule   = null 
+      cron_schedule   = var.dataform_workflow_cron_schedule
     }
   }
 }

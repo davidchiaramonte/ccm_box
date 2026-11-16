@@ -1,8 +1,9 @@
--- This declaration makes the persistent log table "known" to
--- Dataform's dependency graph, allowing other scripts to use ref().
+-- Declares the Recommender BigQuery export so other scripts can use ref().
+-- The export can live in its own project/dataset (recommendations_project / recommendations_dataset);
+-- if those vars are blank or missing, it falls back to the raw billing export location.
 config {
   type: "declaration",
-  database: dataform.projectConfig.vars.raw_billing_project,
-  schema: dataform.projectConfig.vars.raw_billing_dataset,
+  database: dataform.projectConfig.vars.recommendations_project || dataform.projectConfig.vars.raw_billing_project,
+  schema: dataform.projectConfig.vars.recommendations_dataset || dataform.projectConfig.vars.raw_billing_dataset,
   name: dataform.projectConfig.vars.recommendations_table_name
-} 
+}

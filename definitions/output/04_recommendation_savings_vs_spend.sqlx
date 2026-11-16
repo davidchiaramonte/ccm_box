@@ -1,0 +1,72 @@
+/*
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+*/
+
+-- Savings opportunity vs. actual spend: how much of each project's trailing 30-day net spend is
+-- addressable by Google's active recommendations, ranked by estimated monthly savings.
+config {
+  disabled: dataform.projectConfig.vars.enable_recommendations === "false",
+  type: "view",
+  name: "vw_recommendation_savings_vs_spend",
+  description: "Active recommendation savings vs. trailing 30-day net spend per project (and owner, if mapped).",
+  columns: {
+    net_cost_30d: "Billed net cost for the last 30 complete days: cost + ALL credits (CUD, SUD, discounts, promotions), excluding Invoice rows",
+    est_monthly_savings: "Sum of Google's projected savings for active recommendations, normalized to a 30-day month",
+    pct_of_spend_addressable: "est_monthly_savings / net_cost_30d (NULL when there was no spend)",
+    top_recommendations: "Up to 5 recommendations per project, highest savings first"
+  }
+}
+
+WITH spend AS (
+  SELECT
+    project_id,
+    SUM(total_cost + total_credits) AS net_cost_30d
+  FROM ${ref(dataform.projectConfig.vars.daily_summary_table_name)}
+  WHERE usage_start_date BETWEEN DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY) AND DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+    AND service_description != 'Invoice'
+  GROUP BY 1
+),
+recs AS (
+  SELECT
+    project_id,
+    project_name,
+    owner_email,
+    department_name,
+    COUNT(*) AS active_recommendations,
+    COUNTIF(impact_category = 'COST') AS cost_recommendations,
+    COUNTIF(impact_category != 'COST') AS other_recommendations,
+    ROUND(SUM(IFNULL(estimated_monthly_savings, 0)), 2) AS est_monthly_savings,
+    ARRAY_AGG(
+      STRUCT(recommendation_type, resource_name, action, ROUND(estimated_monthly_savings, 2) AS est_monthly_savings, priority, link)
+      ORDER BY IFNULL(estimated_monthly_savings, 0) DESC, priority
+      LIMIT 5) AS top_recommendations
+  FROM ${ref("vw_active_recommendations")}
+  GROUP BY 1, 2, 3, 4
+)
+SELECT
+  r.project_id,
+  r.project_name,
+  IFNULL(r.owner_email, 'unmapped') AS owner_email,
+  IFNULL(r.department_name, 'unmapped') AS department_name,
+  ROUND(s.net_cost_30d, 2) AS net_cost_30d,
+  r.active_recommendations,
+  r.cost_recommendations,
+  r.other_recommendations,
+  r.est_monthly_savings,
+  ROUND(SAFE_DIVIDE(r.est_monthly_savings, s.net_cost_30d), 4) AS pct_of_spend_addressable,
+  RANK() OVER (ORDER BY r.est_monthly_savings DESC) AS savings_rank,
+  r.top_recommendations
+FROM recs AS r
+LEFT JOIN spend AS s USING (project_id)

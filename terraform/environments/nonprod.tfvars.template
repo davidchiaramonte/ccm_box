@@ -9,6 +9,8 @@ instance_id            = ""                   # Limit 12 characters! Can be left
 region                 = "us-central1"        # Regional compute location
 location               = "US"                 # Multi-regional BigQuery location - must be same for each instance_id to support unioning in a MV
 time_zone              = "America/Los_Angeles" # Time zone for cron schedules
+dataform_release_cron_schedule  = "0 17 * * *"  # Daily Git compile (in time_zone). null = no schedule
+dataform_workflow_cron_schedule = "30 17 * * *" # Daily pipeline run (in time_zone). Must finish before the alerting trigger (04:00 UTC)
 deletion_protection    = false                # Set to false in dev for clean teardowns
 
 # --- Source Billing Data Context ---
@@ -22,6 +24,9 @@ raw_azure_table_name       = "azure_costs"
 raw_azure_dataset          = "azure_billing"
 azure_advisor_table_name   = "azure_advisor"
 enable_recommendations     = false #if false, can skip recommendations related config
+recommendations_project_id   = ""   # Blank = same project as the billing export
+recommendations_dataset_name = ""   # Blank = same dataset as the billing export
+recommendations_owner_mapping_table = "" # Optional project.dataset.table (project_id, owner_email, department_name)
 enable_azure               = false #if false, can skip azure related config
 
 # --- Git Repository Configuration (Optional) ---

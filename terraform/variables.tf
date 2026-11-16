@@ -48,6 +48,20 @@ variable "time_zone" {
   default     = "America/Los_Angeles"
 }
 
+variable "dataform_release_cron_schedule" {
+  description = "Cron (in var.time_zone) for compiling the Dataform release config from Git. Must run before dataform_workflow_cron_schedule. Set to null to disable scheduled compilation."
+  type        = string
+  default     = "0 17 * * *" # 5:00 PM Pacific = 00:00/01:00 UTC, after the prior UTC billing day closes
+  nullable    = true
+}
+
+variable "dataform_workflow_cron_schedule" {
+  description = "Cron (in var.time_zone) for the daily CCM pipeline run. Without a schedule the pipeline only runs when invoked manually. If the anomaly alerting toolkit is deployed, this must finish before its daily alert trigger (04:00 UTC by default). Set to null to disable."
+  type        = string
+  default     = "30 17 * * *" # 5:30 PM Pacific = 00:30/01:30 UTC
+  nullable    = true
+}
+
 variable "raw_billing_project_id" {
   description = "The external GCP Project ID where the raw billing export table is hosted (needed to grant Dataform read access)"
   type        = string
@@ -67,6 +81,24 @@ variable "recommendations_table_name" {
   description = "The external BigQuery table name containing recommendations exports"
   type        = string
   default     = "recommendations_export"
+}
+
+variable "recommendations_project_id" {
+  description = "Project hosting the Recommender BigQuery export. Leave blank to use raw_billing_project_id. The Dataform service account needs BigQuery Data Viewer on this dataset."
+  type        = string
+  default     = ""
+}
+
+variable "recommendations_dataset_name" {
+  description = "Dataset hosting the Recommender BigQuery export. Leave blank to use raw_billing_dataset_name."
+  type        = string
+  default     = ""
+}
+
+variable "recommendations_owner_mapping_table" {
+  description = "Optional fully-qualified table (project.dataset.table) with columns project_id, owner_email, department_name used to assign recommendation owners (e.g. the anomaly alerting toolkit's project_owner_mapping). Leave blank to skip owner enrichment."
+  type        = string
+  default     = ""
 }
 
 variable "raw_azure_table_name" {
